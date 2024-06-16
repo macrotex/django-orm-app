@@ -26,14 +26,14 @@ server-management code under `acme.servers`, etc.
 3. You already have installed the Django package version 5.x or later.
 
 
-## Details
+## A. Create database Django project
 
 Note. We follow the usual Django tutorial with only a few departures.
 
 1. Create a new Django project called ???:
-```
-$ django-admin startproject mysite
-```
+   ```
+   $ django-admin startproject mysite
+   ```
 
 2. Change into the newly-created project directory.  From now on all
 file paths will be relative from the `mysite` directory just created.
@@ -50,6 +50,12 @@ $ python manage.py startapp acme
 ```
 $ mkdir acme/ourdb
 $ python manage.py startapp ourdb ./acme/ourdb
+```
+
+4. We do not need `acme` as an app, so remove some its files.
+```
+$ rm acme/*.py
+$ rm -rf acme/migrations/
 ```
 
 5. Fix the "name" of the app. Edit `./acme/ourdp/apps.py` and
@@ -125,3 +131,142 @@ Ran 1 test in 0.001s
 OK
 Destroying test database for alias 'default'...
 ```
+
+## B. Package and install database Django project
+
+We use setup ...
+
+1. While in the top-level directory `mysite` (the one with `manage.py`)
+create a minimal `pyproject.toml` file.
+```
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["acme*"]
+
+[project]
+name = "acme_ourdb"
+version = "1.0.0"
+authors = [
+  { name="Jane Roe", email="jroe@example.com" },
+]
+description = "Acme Database Models"
+readme = "README.md"
+requires-python = ">=3.9"
+```
+
+2. Create the Python package.
+```
+$ pip install build twine
+$ python -m build
+```
+
+3. The above build step creates a Python "wheel" file that is left in
+the `dist/` directory.
+```
+$ ls dist/
+acme_ourdb-1.0.0-py3-none-any.whl  acme_ourdb-1.0.0.tar.gz
+```
+
+4. Install the package.
+```
+$ pip install dist/acme_ourdb-1.0.0-py3-none-any.whl
+```
+
+## C. Use `acme.ourdb` in another Django package
+
+1. Change directory to a location where you will put a new Django project.
+Our new Django project will be called `myweb`.
+```
+$ cd /some/appropriate/path
+$ django-admin startproject myweb
+```
+
+2. Chanage into the new directory `myweb/`.
+```
+$ cd myweb
+```
+
+3. Add the `acme.ourdb` app to `myweb`'s installed apps by
+editing `myweb/settings.py` and adding it to the list
+```
+INSTALLED_APPS = [
+    'acme.ourdb',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    ...
+]
+```
+
+4. Run the migrations. This will create the `acme.ourdb` tables in the
+database.
+```
+$ python manage.py migrate
+Operations to perform:
+  Apply all migrations: admin, auth, contenttypes, ourdb, sessions
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying auth.0001_initial... OK
+  Applying admin.0001_initial... OK
+  ...
+  Applying ourdb.0001_initial... OK     <-- the acme.ourdb migration
+  Applying sessions.0001_initial... OK
+```
+
+5. Create a superuser.
+```
+$ python manage.py createsuperuser
+Username (leave blank to use 'myuser'): admin
+Email address: admin@example.com
+Password:
+Password (again):
+Superuser created successfully.
+```
+
+6. Run the local web server to ensure everything is working.
+```
+$ python manage.py runserver
+```
+
+7. Open `http://127.0.0.1:8000/admin` and login using the
+superuser name and password.
+
+8. Create an app within `myweb`. We will create the `main` app.
+```
+$ python manage.py startapp main
+```
+
+9. Add this new app to `myweb`'s list of installed apps.
+```
+INSTALLED_APPS = [
+    'main',
+    'acme.ourdb',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    ...
+]
+```
+
+10. Register the `acme.ourdb` models in the `main` admin
+by editing `main/adminp.py`.
+```
+# main/adminp.py
+from django.contrib import admin
+from acme.ourdb.models import Question, Choice
+
+admin.site.register(Question)
+admin.site.register(Choice)
+```
+
+11. Open the admin site again and verify that you can edit the
+Question and Choice models.
+
+12. After you make changes to the database scheme in `acme.ourdb` you
+need to package, install, and then run the migration in each other
+project that uses `acme.ourdb`.
